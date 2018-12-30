@@ -1,7 +1,7 @@
 import argparse
 import datetime
-import sys
 import json
+import sys
 
 import click
 import requests
@@ -153,14 +153,19 @@ if __name__ == "__main__":
             click.echo(f"[{i}] {title}")
         subcollection_index = click.prompt("Choose: ", type=int)
         subcollection = parent_collection[subcollection_index]
-        parent_collection = oz.get_parent_collection(channel_id, subcollection["id"])
-        click.echo("*************************")
-        for i, collection in enumerate(parent_collection):
-            title = collection.get("name") or collection.get("title")
-            click.echo(f"[{i}] {title}")
-        subcollection_index = click.prompt("Choose: ", type=int)
-        subcollection = parent_collection[subcollection_index]
-        streamUrl = subcollection["_links"]["streamUrl"]
+        try:
+            streamUrl = subcollection["_links"]["streamUrl"]
+        except KeyError:
+            parent_collection = oz.get_parent_collection(
+                channel_id, subcollection["id"]
+            )
+            click.echo("*************************")
+            for i, collection in enumerate(parent_collection):
+                title = collection.get("name") or collection.get("title")
+                click.echo(f"[{i}] {title}")
+            subcollection_index = click.prompt("Choose: ", type=int)
+            subcollection = parent_collection[subcollection_index]
+            streamUrl = subcollection["_links"]["streamUrl"]
     filename = click.prompt("Filename : ", type=str)
     print(
         " ".join(

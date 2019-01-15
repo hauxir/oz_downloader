@@ -1,7 +1,7 @@
-import os
 import argparse
 import datetime
 import json
+import os
 import sys
 from subprocess import Popen
 
@@ -140,7 +140,7 @@ def extract_streamUrl(streamUrl):
     url = streamData["cdnUrl"]
     cookie = streamData["cookieName"]
     token = streamData["token"]
-    requests.post("https://playlist.oz.com/cookie", dict(name=cookie, value=token))
+    # requests.post("https://playlist.oz.com/cookie", dict(name=cookie, value=token))
     return url, cookie, token
 
 
@@ -168,9 +168,12 @@ if __name__ == "__main__":
         click.echo(f"[{i}] {title}")
     subcollection_index = click.prompt("Choose", type=int)
     subcollection = parent_collection[subcollection_index]
+    name = subcollection.get("name") or subcollection.get("title")
+    filename = name
     try:
         streamUrl = subcollection["_links"]["streamUrl"]
         url, cookie, token = extract_streamUrl(streamUrl)
+        filename += f'_{subcollection["id"]}'
     except KeyError:
         parent_collection = oz.get_parent_collection(channel_id, subcollection["id"])
         click.echo("*************************")
@@ -179,9 +182,12 @@ if __name__ == "__main__":
             click.echo(f"[{i}] {title}")
         subcollection_index = click.prompt("Choose", type=int)
         subcollection = parent_collection[subcollection_index]
+        name = subcollection.get("name") or subcollection.get("title")
+        filename += f"_{name}"
         try:
             streamUrl = subcollection["_links"]["streamUrl"]
             url, cookie, token = extract_streamUrl(streamUrl)
+            filename += f'_{subcollection["id"]}'
         except KeyError:
             parent_collection = oz.get_parent_collection(
                 channel_id, subcollection["id"]
@@ -192,9 +198,11 @@ if __name__ == "__main__":
                 click.echo(f"[{i}] {title}")
             subcollection_index = click.prompt("Choose", type=int)
             subcollection = parent_collection[subcollection_index]
+            title = subcollection.get("name") or subcollection.get("title")
+            filename += f"_{title}"
             streamUrl = subcollection["_links"]["streamUrl"]
             url, cookie, token = extract_streamUrl(streamUrl)
-    filename = click.prompt("Filename", type=str)
+            filename += f'_{subcollection["id"]}'
     os.system(
         " ".join(
             [
@@ -204,7 +212,7 @@ if __name__ == "__main__":
                 f"hls://{url}?ssl=true",
                 "best",
                 "-o",
-                filename,
+                f'"{filename}.ts"',
                 "--http-cookie",
                 f'"{cookie}={token}; Domain=oz.com; Path=/"',
             ]

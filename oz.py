@@ -1,7 +1,9 @@
+import os
 import argparse
 import datetime
 import json
 import sys
+from subprocess import Popen
 
 import click
 import requests
@@ -26,6 +28,9 @@ class OZ:
         self._password = password
         self._renew_token()
         self._cookies = {}
+        self._channels = {
+            x["slug"]: x for x in json.loads(self._get2(CHANNELS_URL))["data"]
+        }
 
     def _token_expired(self):
         return (
@@ -56,10 +61,20 @@ class OZ:
         except KeyError:
             raise Exception("Invalid login credentials!")
 
+    def _get2(self, url):
+        if not self._access_token or self._token_expired():
+            self._renew_token()
+        headers = {
+            "Authorization": "Bearer " + self._access_token,
+            "User-Agent": USER_AGENT,
+        }
+        request = requests.get(url, headers=headers)
+        return request.content
+
     def _get_channel_json(self, name):
         c = self._channels[name]
         channel_url = CHANNEL_URL % c["id"]
-        return json.loads(self._get(channel_url))
+        return json.loads(self._get2(channel_url))
 
     def _renew_cookie(self, channel, channel_json=None):
         if not channel_json:
@@ -120,6 +135,15 @@ class OZ:
         ]
 
 
+def extract_streamUrl(streamUrl):
+    streamData = oz._get(streamUrl).json()["data"]
+    url = streamData["cdnUrl"]
+    cookie = streamData["cookieName"]
+    token = streamData["token"]
+    requests.post("https://playlist.oz.com/cookie", dict(name=cookie, value=token))
+    return url, cookie, token
+
+
 if __name__ == "__main__":
     oz = OZ(sys.argv[1], sys.argv[2])
     channels = oz.channels()
@@ -127,34 +151,37 @@ if __name__ == "__main__":
     for i, channel in enumerate(channels):
         title = channel.get("name")
         click.echo(f"[{i}] {title}")
-    channel_index = click.prompt("Choose: ", type=int)
+    channel_index = click.prompt("Choose", type=int)
     channel_id = channels[channel_index]["id"]
+    slug = next(c["slug"] for c in oz.channels() if c["id"] == channel_id)
     collections = oz.get_videos_collections(channel_id)
     click.echo("*************************")
     for i, collection in enumerate(collections):
         title = collection.get("name") or collection.get("title")
         click.echo(f"[{i}] {title}")
-    collection_index = click.prompt("Choose: ", type=int)
+    collection_index = click.prompt("Choose", type=int)
     collection_id = collections[collection_index]["id"]
     parent_collection = oz.get_parent_collection(channel_id, collection_id)
     click.echo("*************************")
     for i, collection in enumerate(parent_collection):
         title = collection.get("name") or collection.get("title")
         click.echo(f"[{i}] {title}")
-    subcollection_index = click.prompt("Choose: ", type=int)
+    subcollection_index = click.prompt("Choose", type=int)
     subcollection = parent_collection[subcollection_index]
     try:
         streamUrl = subcollection["_links"]["streamUrl"]
+        url, cookie, token = extract_streamUrl(streamUrl)
     except KeyError:
         parent_collection = oz.get_parent_collection(channel_id, subcollection["id"])
         click.echo("*************************")
         for i, collection in enumerate(parent_collection):
             title = collection.get("name") or collection.get("title")
             click.echo(f"[{i}] {title}")
-        subcollection_index = click.prompt("Choose: ", type=int)
+        subcollection_index = click.prompt("Choose", type=int)
         subcollection = parent_collection[subcollection_index]
         try:
             streamUrl = subcollection["_links"]["streamUrl"]
+            url, cookie, token = extract_streamUrl(streamUrl)
         except KeyError:
             parent_collection = oz.get_parent_collection(
                 channel_id, subcollection["id"]
@@ -163,22 +190,23 @@ if __name__ == "__main__":
             for i, collection in enumerate(parent_collection):
                 title = collection.get("name") or collection.get("title")
                 click.echo(f"[{i}] {title}")
-            subcollection_index = click.prompt("Choose: ", type=int)
+            subcollection_index = click.prompt("Choose", type=int)
             subcollection = parent_collection[subcollection_index]
             streamUrl = subcollection["_links"]["streamUrl"]
-    filename = click.prompt("Filename : ", type=str)
-    print(
+            url, cookie, token = extract_streamUrl(streamUrl)
+    filename = click.prompt("Filename", type=str)
+    os.system(
         " ".join(
             [
                 "streamlink",
                 "--http-header",
                 '"User-Agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.133 Safari/537.36"',
-                f"hls://{streamUrl}",
+                f"hls://{url}?ssl=true",
                 "best",
                 "-o",
                 filename,
                 "--http-cookie",
-                f'"token-{oz._access_token}; Domain=oz.com; Path=/"',
+                f'"{cookie}={token}; Domain=oz.com; Path=/"',
             ]
         )
     )

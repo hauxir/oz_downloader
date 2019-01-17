@@ -2,6 +2,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import sys
 from subprocess import Popen
 
@@ -203,6 +204,7 @@ if __name__ == "__main__":
             streamUrl = subcollection["_links"]["streamUrl"]
             url, cookie, token = extract_streamUrl(streamUrl)
             filename += f'_{subcollection["id"]}'
+    filename = re.sub(r"\W+", "", filename)
     os.system(
         " ".join(
             [
